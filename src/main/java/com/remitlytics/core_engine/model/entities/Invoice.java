@@ -34,7 +34,7 @@ public class Invoice {
     private LocalDateTime createdAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "client_id", nullable = false)
+    @JoinColumn(name = "client_id", nullable = false, referencedColumnName = "id")
     private Client client;
 
     @PrePersist
