@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional; // Preferred ov
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -45,5 +46,45 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoiceAuditLogRepository.save(auditLog);
 
         return savedInvoice;
+    }
+
+    @Override
+    @Transactional
+    public Invoice updateInvoiceStatus(UUID invoiceId, InvoiceStatus newStatus, String reason) {
+        // 1. Fetch the invoice
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
+
+        InvoiceStatus currentStatus = invoice.getStatus();
+
+        // 2. Guard Rail: Validate the State Machine transitions
+        if (currentStatus == newStatus) {
+            return invoice; // No change needed
+        }
+
+        boolean isValidTransition = switch (currentStatus) {
+            case DRAFT -> newStatus == InvoiceStatus.SENT || newStatus == InvoiceStatus.CANCELLED;
+            case SENT -> newStatus == InvoiceStatus.PAID || newStatus == InvoiceStatus.OVERDUE || newStatus == InvoiceStatus.CANCELLED;
+            case OVERDUE -> newStatus == InvoiceStatus.PAID || newStatus == InvoiceStatus.CANCELLED;
+            default ->  false; // Terminal states cannot change
+        };
+
+        if (!isValidTransition) {
+            throw new IllegalStateException("Illegal state transition from " + currentStatus + " to " + newStatus);
+        }
+
+        // 3. Apply the new status
+        invoice.setStatus(newStatus);
+        Invoice updatedInvoice = invoiceRepository.save(invoice);
+
+        // 4. Log the change to the Audit Ledger
+        InvoiceAuditLog auditLog = new InvoiceAuditLog();
+        auditLog.setInvoice(updatedInvoice);
+        auditLog.setPreviousStatus(currentStatus);
+        auditLog.setNewStatus(newStatus);
+        auditLog.setReason(reason);
+        invoiceAuditLogRepository.save(auditLog);
+
+        return updatedInvoice;
     }
 }

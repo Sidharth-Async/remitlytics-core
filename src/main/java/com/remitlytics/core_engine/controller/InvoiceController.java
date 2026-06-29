@@ -1,16 +1,17 @@
 package com.remitlytics.core_engine.controller;
 
 import com.remitlytics.core_engine.dto.CreateInvoiceRequest;
+import com.remitlytics.core_engine.dto.InvoiceResponse;
+import com.remitlytics.core_engine.dto.UpdateStatusRequest;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.service.InvoiceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -20,12 +21,43 @@ public class InvoiceController {
     private final InvoiceService invoiceService;
 
     @PostMapping("/invoices")
-    public ResponseEntity<Invoice> createInvoice(@Valid @RequestBody CreateInvoiceRequest request){
-        Invoice createInvoice = invoiceService.createDraftInvoice(
+    public ResponseEntity<InvoiceResponse> createInvoice(@Valid @RequestBody CreateInvoiceRequest request){
+        Invoice entity = invoiceService.createDraftInvoice(
                 request.clientId(),
                 request.amountCents(),
                 request.dueDate()
         );
-        return new ResponseEntity<>(createInvoice, HttpStatus.CREATED);
+
+        InvoiceResponse response = new InvoiceResponse(
+                entity.getId(),
+                entity.getClient().getId(),
+                entity.getClient().getName(),
+                entity.getAmountCents(),
+                entity.getStatus(),
+                entity.getDueDate(),
+                entity.getCreatedAt()
+        );
+
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<InvoiceResponse> updateStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateStatusRequest request) {
+
+        Invoice entity = invoiceService.updateInvoiceStatus(id, request.status(), request.reason());
+
+        InvoiceResponse response = new InvoiceResponse(
+                entity.getId(),
+                entity.getClient().getId(),
+                entity.getClient().getName(),
+                entity.getAmountCents(),
+                entity.getStatus(),
+                entity.getDueDate(),
+                entity.getCreatedAt()
+        );
+
+        return ResponseEntity.ok(response);
     }
 }
