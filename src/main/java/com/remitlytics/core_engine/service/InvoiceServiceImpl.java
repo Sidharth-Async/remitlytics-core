@@ -1,5 +1,6 @@
 package com.remitlytics.core_engine.service;
 
+import com.remitlytics.core_engine.dto.InvoiceBreakdown;
 import com.remitlytics.core_engine.model.entities.Client;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.model.entities.InvoiceAuditLog;
@@ -22,6 +23,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final ClientRepository clientRepository;
     private final InvoiceAuditLogRepository invoiceAuditLogRepository;
+    private final InvoiceCalculationService invoiceCalculationService;
 
     @Override
     @Transactional
@@ -30,11 +32,23 @@ public class InvoiceServiceImpl implements InvoiceService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Client not found"));
 
+        /*Invoke the calculation service using the incoming raw amount, a fixed platform fee of
+            1.5 (percent), and a default tax rate of 18.0 (percent).*/
+        InvoiceBreakdown breakdown = new InvoiceCalculationServiceImpl()
+                .calculate(amountCents, 1.5, 18.0);
+
         Invoice invoice = new Invoice();
         invoice.setAmountCents(amountCents);
         invoice.setDueDate(dueDate);
         invoice.setStatus(InvoiceStatus.DRAFT);
         invoice.setClient(client); // <-- FIX: Connects the invoice to your client row
+
+        /*Map the values out of the returned InvoiceBreakdown record directly onto the
+            Invoice entity fields before invoking invoiceRepository.save(entity).*/
+
+        invoice.setPlatformFeeCents(breakdown.platformFeeCents());
+        invoice.setTaxCents(breakdown.taxCents());
+        invoice.setTotalCents(breakdown.totalCents());
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
 

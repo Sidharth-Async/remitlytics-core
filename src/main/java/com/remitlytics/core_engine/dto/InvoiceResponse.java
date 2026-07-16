@@ -13,5 +13,8 @@ public record InvoiceResponse(
         Long amountCents,
         InvoiceStatus status,
         LocalDate dueDate,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        long platformFeeCents,
+        long taxCents,
+        long totalCents
 ) {}

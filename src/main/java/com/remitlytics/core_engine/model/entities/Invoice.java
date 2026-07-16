@@ -42,5 +42,8 @@ public class Invoice {
         this.createdAt = LocalDateTime.now();
     }
 
+    private Long platformFeeCents;
+    private Long taxCents;
+    private Long totalCents;
 
 }

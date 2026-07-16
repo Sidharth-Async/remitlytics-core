@@ -35,13 +35,16 @@ public class InvoiceController {
                 entity.getAmountCents(),
                 entity.getStatus(),
                 entity.getDueDate(),
-                entity.getCreatedAt()
+                entity.getCreatedAt(),
+                entity.getPlatformFeeCents(),
+                entity.getTaxCents(),
+                entity.getTotalCents()
         );
 
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
-    @PatchMapping("/{id}/status")
+    @PatchMapping("/invoices/{id}/status")
     public ResponseEntity<InvoiceResponse> updateStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateStatusRequest request) {
@@ -55,7 +58,10 @@ public class InvoiceController {
                 entity.getAmountCents(),
                 entity.getStatus(),
                 entity.getDueDate(),
-                entity.getCreatedAt()
+                entity.getCreatedAt(),
+                entity.getPlatformFeeCents(),
+                entity.getTaxCents(),
+                entity.getTotalCents()
         );
 
         return ResponseEntity.ok(response);
