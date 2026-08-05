@@ -1,6 +1,7 @@
 package com.remitlytics.core_engine.service;
 
 import com.remitlytics.core_engine.dto.InvoiceBreakdown;
+import com.remitlytics.core_engine.dto.WebhookEvent;
 import com.remitlytics.core_engine.model.entities.Client;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.model.entities.InvoiceAuditLog;
@@ -8,11 +9,10 @@ import com.remitlytics.core_engine.model.enums.InvoiceStatus;
 import com.remitlytics.core_engine.repository.ClientRepository;
 import com.remitlytics.core_engine.repository.InvoiceAuditLogRepository;
 import com.remitlytics.core_engine.repository.InvoiceRepository;
-import org.springframework.transaction.annotation.Transactional; // Preferred over jakarta.transaction for Spring features
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -41,7 +41,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoice.setAmountCents(amountCents);
         invoice.setDueDate(dueDate);
         invoice.setStatus(InvoiceStatus.DRAFT);
-        invoice.setClient(client); // <-- FIX: Connects the invoice to your client row
+        invoice.setClient(client);
 
         /*Map the values out of the returned InvoiceBreakdown record directly onto the
             Invoice entity fields before invoking invoiceRepository.save(entity).*/
@@ -101,4 +101,23 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         return updatedInvoice;
     }
+
+    @Transactional
+    @Override
+    public Invoice processPaymentWebhook(WebhookEvent event, Long amountCents) {
+        UUID clientId = UUID.fromString(event.invoiceId());
+        Invoice invoice = invoiceRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
+
+        if (invoice.getStatus() == InvoiceStatus.PAID) {
+            return invoice;
+        }
+
+        if (event.amountReceivedCents() == amountCents) {
+            return updateInvoiceStatus(clientId, InvoiceStatus.PAID, "Payment confirmed via webhook. Transaction Ref: " + event.transactionId());
+        }
+
+        return invoice;
+    }
+
 }
