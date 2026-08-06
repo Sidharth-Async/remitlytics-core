@@ -5,9 +5,12 @@ import com.remitlytics.core_engine.dto.InvoiceResponse;
 import com.remitlytics.core_engine.dto.UpdateStatusRequest;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.service.InvoiceService;
+import com.remitlytics.core_engine.service.PdfExportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,6 +22,7 @@ import java.util.UUID;
 public class InvoiceController {
 
     private final InvoiceService invoiceService;
+    private final PdfExportService pdfExportService;
 
     @PostMapping("/invoices")
     public ResponseEntity<InvoiceResponse> createInvoice(@Valid @RequestBody CreateInvoiceRequest request){
@@ -65,5 +69,19 @@ public class InvoiceController {
         );
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> downloadInvoicePdf(@PathVariable UUID id) {
+        InvoiceResponse invoice = invoiceService.getInvoiceById(id);
+        byte[] pdfBytes = pdfExportService.generateInvoicePdf(invoice);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", "invoice_" + id + ".pdf");
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(pdfBytes);
     }
 }

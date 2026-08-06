@@ -1,5 +1,6 @@
 package com.remitlytics.core_engine.service;
 
+import com.remitlytics.core_engine.dto.InvoiceResponse;
 import com.remitlytics.core_engine.dto.WebhookEvent;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.model.enums.InvoiceStatus;
@@ -16,4 +17,8 @@ public interface InvoiceService {
     Invoice updateInvoiceStatus(UUID invoiceId, InvoiceStatus newStatus, String reason);
 
     Invoice processPaymentWebhook(WebhookEvent event, Long amountCents);
+
+    int processOverdueInvoices();
+
+    InvoiceResponse getInvoiceById(UUID id);
 }

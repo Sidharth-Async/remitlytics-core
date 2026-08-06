@@ -1,6 +1,7 @@
 package com.remitlytics.core_engine.service;
 
 import com.remitlytics.core_engine.dto.InvoiceBreakdown;
+import com.remitlytics.core_engine.dto.InvoiceResponse;
 import com.remitlytics.core_engine.dto.WebhookEvent;
 import com.remitlytics.core_engine.model.entities.Client;
 import com.remitlytics.core_engine.model.entities.Invoice;
@@ -9,11 +10,12 @@ import com.remitlytics.core_engine.model.enums.InvoiceStatus;
 import com.remitlytics.core_engine.repository.ClientRepository;
 import com.remitlytics.core_engine.repository.InvoiceAuditLogRepository;
 import com.remitlytics.core_engine.repository.InvoiceRepository;
-import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,15 +28,34 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final InvoiceCalculationService invoiceCalculationService;
 
     @Override
+    @Transactional(readOnly = true)
+    public InvoiceResponse getInvoiceById(UUID id) {
+        Invoice invoice = invoiceRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Invoice not found with ID: " + id));
+
+        return new InvoiceResponse(
+                invoice.getId(),
+                invoice.getClient().getId(),
+                invoice.getClient().getName(),
+                invoice.getAmountCents(),
+                invoice.getStatus(),
+                invoice.getDueDate(),
+                invoice.getCreatedAt(),
+                invoice.getPlatformFeeCents(),
+                invoice.getTaxCents(),
+                invoice.getTotalCents()
+        );
+    }
+
+    @Override
     @Transactional
     public Invoice createDraftInvoice(UUID clientId, Long amountCents, LocalDate dueDate) {
 
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Client not found"));
 
-        /*Invoke the calculation service using the incoming raw amount, a fixed platform fee of
-            1.5 (percent), and a default tax rate of 18.0 (percent).*/
-        InvoiceBreakdown breakdown = new InvoiceCalculationServiceImpl()
+        /* Use injected calculation service spring bean */
+        InvoiceBreakdown breakdown = invoiceCalculationService
                 .calculate(amountCents, 1.5, 18.0);
 
         Invoice invoice = new Invoice();
@@ -42,9 +63,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoice.setDueDate(dueDate);
         invoice.setStatus(InvoiceStatus.DRAFT);
         invoice.setClient(client);
-
-        /*Map the values out of the returned InvoiceBreakdown record directly onto the
-            Invoice entity fields before invoking invoiceRepository.save(entity).*/
 
         invoice.setPlatformFeeCents(breakdown.platformFeeCents());
         invoice.setTaxCents(breakdown.taxCents());
@@ -65,33 +83,29 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Override
     @Transactional
     public Invoice updateInvoiceStatus(UUID invoiceId, InvoiceStatus newStatus, String reason) {
-        // 1. Fetch the invoice
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
 
         InvoiceStatus currentStatus = invoice.getStatus();
 
-        // 2. Guard Rail: Validate the State Machine transitions
         if (currentStatus == newStatus) {
-            return invoice; // No change needed
+            return invoice;
         }
 
         boolean isValidTransition = switch (currentStatus) {
             case DRAFT -> newStatus == InvoiceStatus.SENT || newStatus == InvoiceStatus.CANCELLED;
             case SENT -> newStatus == InvoiceStatus.PAID || newStatus == InvoiceStatus.OVERDUE || newStatus == InvoiceStatus.CANCELLED;
             case OVERDUE -> newStatus == InvoiceStatus.PAID || newStatus == InvoiceStatus.CANCELLED;
-            default ->  false; // Terminal states cannot change
+            default -> false;
         };
 
         if (!isValidTransition) {
             throw new IllegalStateException("Illegal state transition from " + currentStatus + " to " + newStatus);
         }
 
-        // 3. Apply the new status
         invoice.setStatus(newStatus);
         Invoice updatedInvoice = invoiceRepository.save(invoice);
 
-        // 4. Log the change to the Audit Ledger
         InvoiceAuditLog auditLog = new InvoiceAuditLog();
         auditLog.setInvoice(updatedInvoice);
         auditLog.setPreviousStatus(currentStatus);
@@ -105,8 +119,8 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     @Override
     public Invoice processPaymentWebhook(WebhookEvent event, Long amountCents) {
-        UUID clientId = UUID.fromString(event.invoiceId());
-        Invoice invoice = invoiceRepository.findById(clientId)
+        UUID invoiceId = UUID.fromString(event.invoiceId());
+        Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
 
         if (invoice.getStatus() == InvoiceStatus.PAID) {
@@ -114,10 +128,27 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         if (event.amountReceivedCents() == amountCents) {
-            return updateInvoiceStatus(clientId, InvoiceStatus.PAID, "Payment confirmed via webhook. Transaction Ref: " + event.transactionId());
+            return updateInvoiceStatus(invoiceId, InvoiceStatus.PAID, "Payment confirmed via webhook. Transaction Ref: " + event.transactionId());
         }
 
         return invoice;
     }
 
+    @Override
+    @Transactional
+    public int processOverdueInvoices() {
+        LocalDate today = LocalDate.now();
+        List<Invoice> expiredInvoices = invoiceRepository.findByStatusAndDueDateBefore(InvoiceStatus.SENT, today);
+
+        int count = 0;
+        for (Invoice invoice : expiredInvoices) {
+            updateInvoiceStatus(
+                    invoice.getId(),
+                    InvoiceStatus.OVERDUE,
+                    "Automated Cron Engine: Payment due date [" + invoice.getDueDate() + "] passed."
+            );
+            count++;
+        }
+        return count;
+    }
 }

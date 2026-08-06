@@ -1,44 +1,40 @@
 package com.remitlytics.core_engine.service;
 
 import com.remitlytics.core_engine.dto.InvoiceBreakdown;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 @Service
-@RequiredArgsConstructor
-public class InvoiceCalculationServiceImpl implements InvoiceCalculationService{
-
-    /*      1. Convert baseAmountCents to BigDecimal.
-            2. Platform Fee = baseAmountCents×(feePercentage/100). Round to whole number
-                using .setScale(0, RoundingMode.HALF_UP).
-            3. Taxable Subtotal = baseAmountCents+Platform Fee.
-            4. Tax = Taxable Subtotal×(taxPercentage/100). Round to whole number using
-                .setScale(0, RoundingMode.HALF_UP).
-            5. Total = Taxable Subtotal+Tax.
-            6. Convert all final BigDecimal results back to primitive long via
-                .longValue() and return the InvoiceBreakdown record.  */
+public class InvoiceCalculationServiceImpl implements InvoiceCalculationService {
 
     @Override
-    public InvoiceBreakdown calculate(long baseAmountCents, double feePercentage, double taxPercentage) {
-        BigDecimal baseAmount = BigDecimal.valueOf(baseAmountCents);
-        BigDecimal hundred = BigDecimal.valueOf(100);
+    public InvoiceBreakdown calculate(long baseAmountCents, double platformFeePercent, double taxPercent) {
+        if (baseAmountCents < 0) {
+            throw new IllegalArgumentException("Base amount cents must be a non-negative number.");
+        }
 
-        BigDecimal fee = baseAmount.multiply(BigDecimal.valueOf(feePercentage))
-                .divide(hundred, 0, RoundingMode.HALF_UP);
-        BigDecimal taxableSubtotal = baseAmount.add(fee);
-        BigDecimal tax = taxableSubtotal.multiply(BigDecimal.valueOf(taxPercentage))
-                .divide(hundred, 0, RoundingMode.HALF_UP);
+        BigDecimal base = BigDecimal.valueOf(baseAmountCents);
 
-        BigDecimal total = taxableSubtotal.add(tax);
+        // 1. Calculate Platform Fee: (base * feePercent) / 100
+        BigDecimal feeRate = BigDecimal.valueOf(platformFeePercent).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
+        long platformFeeCents = base.multiply(feeRate)
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValueExact();
 
-        return new InvoiceBreakdown(
-                baseAmountCents,
-                fee.longValue(),
-                tax.longValue(),
-                total.longValue()
-        );
+        // 2. Taxable Subtotal = base + platformFee
+        BigDecimal taxableSubtotal = base.add(BigDecimal.valueOf(platformFeeCents));
+
+        // 3. Calculate Tax: (taxableSubtotal * taxPercent) / 100
+        BigDecimal taxRate = BigDecimal.valueOf(taxPercent).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
+        long taxCents = taxableSubtotal.multiply(taxRate)
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValueExact();
+
+        // 4. Total = base + platformFee + tax
+        long totalCents = baseAmountCents + platformFeeCents + taxCents;
+
+        return new InvoiceBreakdown(baseAmountCents, platformFeeCents, taxCents, totalCents);
     }
 }

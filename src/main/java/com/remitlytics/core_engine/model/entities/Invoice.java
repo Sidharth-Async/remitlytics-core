@@ -1,6 +1,7 @@
 package com.remitlytics.core_engine.model.entities;
 
 import com.remitlytics.core_engine.model.enums.InvoiceStatus;
+import com.remitlytics.core_engine.model.listeners.InvoiceEntityListener;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,6 +15,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @Table(name = "invoices")
+@EntityListeners(InvoiceEntityListener.class)
 public class Invoice {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
