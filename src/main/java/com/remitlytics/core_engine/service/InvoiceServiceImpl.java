@@ -6,10 +6,13 @@ import com.remitlytics.core_engine.dto.WebhookEvent;
 import com.remitlytics.core_engine.model.entities.Client;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.model.entities.InvoiceAuditLog;
+import com.remitlytics.core_engine.model.entities.Tenant;
 import com.remitlytics.core_engine.model.enums.InvoiceStatus;
 import com.remitlytics.core_engine.repository.ClientRepository;
 import com.remitlytics.core_engine.repository.InvoiceAuditLogRepository;
 import com.remitlytics.core_engine.repository.InvoiceRepository;
+import com.remitlytics.core_engine.repository.TenantRepository;
+import com.remitlytics.core_engine.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +29,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final ClientRepository clientRepository;
     private final InvoiceAuditLogRepository invoiceAuditLogRepository;
     private final InvoiceCalculationService invoiceCalculationService;
+    private final TenantRepository tenantRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -51,6 +55,14 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public Invoice createDraftInvoice(UUID clientId, Long amountCents, LocalDate dueDate) {
 
+        UUID currentTenantId = TenantContext.getCurrentTenant();
+        if (currentTenantId == null) {
+            throw new IllegalStateException("No active tenant context found");
+        }
+
+        Tenant tenant = tenantRepository.findById(currentTenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Tenant not found"));
+
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Client not found"));
 
@@ -59,6 +71,7 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .calculate(amountCents, 1.5, 18.0);
 
         Invoice invoice = new Invoice();
+        invoice.setTenant(tenant);
         invoice.setAmountCents(amountCents);
         invoice.setDueDate(dueDate);
         invoice.setStatus(InvoiceStatus.DRAFT);
@@ -74,7 +87,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         auditLog.setInvoice(savedInvoice);
         auditLog.setPreviousStatus(null);
         auditLog.setNewStatus(InvoiceStatus.DRAFT);
-        auditLog.setReason("Invoice initialized as Draft via API");
+        auditLog.setReason("Invoice initialized as Draft via API for tenant: " + tenant.getCompanyName());
         invoiceAuditLogRepository.save(auditLog);
 
         return savedInvoice;
@@ -151,4 +164,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
         return count;
     }
+
+
 }
