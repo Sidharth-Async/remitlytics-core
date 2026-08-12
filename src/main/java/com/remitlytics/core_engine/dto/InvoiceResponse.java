@@ -11,10 +11,10 @@ public record InvoiceResponse(
         UUID clientId,
         String clientName,
         Long amountCents,
-        InvoiceStatus status,
-        LocalDate dueDate,
-        LocalDateTime createdAt,
-        long platformFeeCents,
-        long taxCents,
-        long totalCents
+        Long platformFeeCents,
+        Long taxCents,
+        Long totalCents,
+        String status,
+        String dueDate,
+        String createdAt
 ) {}

@@ -46,7 +46,7 @@ public class PdfExportService {
             table.addCell("$" + String.format("%.2f", (double) invoice.taxCents() / 100.0));
 
             // Dynamic label based on payment status
-            String totalLabel = "PAID".equalsIgnoreCase(invoice.status().name()) ? "Total Amount Paid:" : "Total Amount Due:";
+            String totalLabel = "PAID".equalsIgnoreCase(invoice.status()) ? "Total Amount Paid:" : "Total Amount Due:";
             table.addCell(totalLabel);
             table.addCell("$" + String.format("%.2f", (double) invoice.totalCents() / 100.0));
 

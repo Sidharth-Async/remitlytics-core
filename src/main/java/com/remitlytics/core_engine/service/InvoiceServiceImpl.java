@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -42,12 +43,12 @@ public class InvoiceServiceImpl implements InvoiceService {
                 invoice.getClient().getId(),
                 invoice.getClient().getName(),
                 invoice.getAmountCents(),
-                invoice.getStatus(),
-                invoice.getDueDate(),
-                invoice.getCreatedAt(),
                 invoice.getPlatformFeeCents(),
                 invoice.getTaxCents(),
-                invoice.getTotalCents()
+                invoice.getTotalCents(),
+                invoice.getStatus().name(),
+                invoice.getDueDate().toString(),
+                invoice.getCreatedAt().toString()
         );
     }
 
@@ -91,6 +92,32 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoiceAuditLogRepository.save(auditLog);
 
         return savedInvoice;
+    }
+
+    @Override
+    public List<InvoiceResponse> getAllInvoicesForTenant(String apiKey) {
+        // Fetch entities from PostgreSQL
+        List<Invoice> invoices = invoiceRepository.findAll();
+
+        // Map entities to DTOs
+        return invoices.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    private InvoiceResponse mapToResponse(Invoice invoice) {
+        return new InvoiceResponse(
+                invoice.getId(),
+                invoice.getClient().getId(),
+                invoice.getClient().getName(),
+                invoice.getAmountCents(),
+                invoice.getPlatformFeeCents(),
+                invoice.getTaxCents(),
+                invoice.getTotalCents(),
+                invoice.getStatus().name(),
+                invoice.getDueDate().toString(),
+                invoice.getCreatedAt().toString()
+        );
     }
 
     @Override

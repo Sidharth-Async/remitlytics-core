@@ -26,13 +26,27 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     private final RateLimiterService rateLimiterService;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        // Skip API key authentication entirely for browser preflight OPTIONS requests
+        return "OPTIONS".equalsIgnoreCase(request.getMethod());
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+
+        // Fallback guard for OPTIONS requests
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            response.setStatus(HttpServletResponse.SC_OK);
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         String apiKey = request.getHeader("X-API-KEY");
 
         if (apiKey == null || apiKey.isBlank()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\": \"Missing X-API-KEY header\"}");
             return;
         }
@@ -42,6 +56,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
         if (keyEntity.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
             response.getWriter().write("{\"error\": \"Invalid or revoked API Key\"}");
             return;
         }
@@ -51,6 +66,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
         if (!bucket.tryConsume(1)) {
             response.setStatus(429); // 429 Too Many Requests
+            response.setContentType("application/json");
             response.setHeader("X-Rate-Limit-Retry-After-Seconds", "60");
             response.getWriter().write("{\"error\": \"Rate limit exceeded. Maximum 100 requests per minute allowed.\"}");
             return;
@@ -62,7 +78,6 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         } finally {
             TenantContext.clear(); // Always wipe ThreadLocal state after request ends
         }
-
     }
 
     private String hashApiKey(String key) {
