@@ -67,21 +67,7 @@ public class InvoiceController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateStatusRequest request) {
 
-        Invoice entity = invoiceService.updateInvoiceStatus(id, request.status(), request.reason());
-
-        InvoiceResponse response = new InvoiceResponse(
-                entity.getId(),
-                entity.getClient().getId(),
-                entity.getClient().getName(),
-                entity.getAmountCents(),
-                entity.getPlatformFeeCents(),
-                entity.getTaxCents(),
-                entity.getTotalCents(),
-                entity.getStatus().name(),
-                entity.getDueDate().toString(),
-                entity.getCreatedAt().toString()
-        );
-
+        InvoiceResponse response = invoiceService.updateInvoiceStatus(id, request.status(), request.reason());
         return ResponseEntity.ok(response);
     }
 

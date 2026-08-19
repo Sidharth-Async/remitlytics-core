@@ -31,6 +31,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final InvoiceAuditLogRepository invoiceAuditLogRepository;
     private final InvoiceCalculationService invoiceCalculationService;
     private final TenantRepository tenantRepository;
+    private final LedgerService ledgerService; // Injected Ledger Service
 
     @Override
     @Transactional(readOnly = true)
@@ -38,24 +39,12 @@ public class InvoiceServiceImpl implements InvoiceService {
         Invoice invoice = invoiceRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Invoice not found with ID: " + id));
 
-        return new InvoiceResponse(
-                invoice.getId(),
-                invoice.getClient().getId(),
-                invoice.getClient().getName(),
-                invoice.getAmountCents(),
-                invoice.getPlatformFeeCents(),
-                invoice.getTaxCents(),
-                invoice.getTotalCents(),
-                invoice.getStatus().name(),
-                invoice.getDueDate().toString(),
-                invoice.getCreatedAt().toString()
-        );
+        return mapToResponse(invoice);
     }
 
     @Override
     @Transactional
     public Invoice createDraftInvoice(UUID clientId, Long amountCents, LocalDate dueDate) {
-
         UUID currentTenantId = TenantContext.getCurrentTenant();
         if (currentTenantId == null) {
             throw new IllegalStateException("No active tenant context found");
@@ -67,9 +56,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Client not found"));
 
-        /* Use injected calculation service spring bean */
-        InvoiceBreakdown breakdown = invoiceCalculationService
-                .calculate(amountCents, 1.5, 18.0);
+        InvoiceBreakdown breakdown = invoiceCalculationService.calculate(amountCents, 1.5, 18.0);
 
         Invoice invoice = new Invoice();
         invoice.setTenant(tenant);
@@ -84,6 +71,7 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
 
+        // Audit Log: Creation
         InvoiceAuditLog auditLog = new InvoiceAuditLog();
         auditLog.setInvoice(savedInvoice);
         auditLog.setPreviousStatus(null);
@@ -95,41 +83,28 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<InvoiceResponse> getAllInvoicesForTenant(String apiKey) {
-        // Fetch entities from PostgreSQL
-        List<Invoice> invoices = invoiceRepository.findAll();
+        UUID currentTenantId = TenantContext.getCurrentTenant();
+        List<Invoice> invoices = (currentTenantId != null)
+                ? invoiceRepository.findByTenantId(currentTenantId)
+                : invoiceRepository.findAll();
 
-        // Map entities to DTOs
         return invoices.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    private InvoiceResponse mapToResponse(Invoice invoice) {
-        return new InvoiceResponse(
-                invoice.getId(),
-                invoice.getClient().getId(),
-                invoice.getClient().getName(),
-                invoice.getAmountCents(),
-                invoice.getPlatformFeeCents(),
-                invoice.getTaxCents(),
-                invoice.getTotalCents(),
-                invoice.getStatus().name(),
-                invoice.getDueDate().toString(),
-                invoice.getCreatedAt().toString()
-        );
-    }
-
     @Override
     @Transactional
-    public Invoice updateInvoiceStatus(UUID invoiceId, InvoiceStatus newStatus, String reason) {
+    public InvoiceResponse updateInvoiceStatus(UUID invoiceId, InvoiceStatus newStatus, String reason) {
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
 
         InvoiceStatus currentStatus = invoice.getStatus();
 
         if (currentStatus == newStatus) {
-            return invoice;
+            return mapToResponse(invoice);
         }
 
         boolean isValidTransition = switch (currentStatus) {
@@ -146,32 +121,38 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoice.setStatus(newStatus);
         Invoice updatedInvoice = invoiceRepository.save(invoice);
 
+        // Audit Log: State transition
         InvoiceAuditLog auditLog = new InvoiceAuditLog();
         auditLog.setInvoice(updatedInvoice);
         auditLog.setPreviousStatus(currentStatus);
         auditLog.setNewStatus(newStatus);
-        auditLog.setReason(reason);
+        auditLog.setReason(reason != null ? reason : "Manual status transition to " + newStatus);
         invoiceAuditLogRepository.save(auditLog);
 
-        return updatedInvoice;
+        // Trigger Ledger double-entry postings when moving to PAID
+        if (newStatus == InvoiceStatus.PAID) {
+            ledgerService.recordInvoicePayment(updatedInvoice);
+        }
+
+        return mapToResponse(updatedInvoice);
     }
 
-    @Transactional
     @Override
-    public Invoice processPaymentWebhook(WebhookEvent event, Long amountCents) {
+    @Transactional
+    public InvoiceResponse processPaymentWebhook(WebhookEvent event, Long amountCents) {
         UUID invoiceId = UUID.fromString(event.invoiceId());
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
 
         if (invoice.getStatus() == InvoiceStatus.PAID) {
-            return invoice;
+            return mapToResponse(invoice);
         }
 
-        if (event.amountReceivedCents() == amountCents) {
-            return updateInvoiceStatus(invoiceId, InvoiceStatus.PAID, "Payment confirmed via webhook. Transaction Ref: " + event.transactionId());
+        if (event.amountReceivedCents() == (amountCents)) {
+            return updateInvoiceStatus(invoiceId, InvoiceStatus.PAID, "Payment confirmed via webhook. Ref: " + event.transactionId());
         }
 
-        return invoice;
+        return mapToResponse(invoice);
     }
 
     @Override
@@ -192,5 +173,18 @@ public class InvoiceServiceImpl implements InvoiceService {
         return count;
     }
 
-
+    private InvoiceResponse mapToResponse(Invoice invoice) {
+        return new InvoiceResponse(
+                invoice.getId(),
+                invoice.getClient().getId(),
+                invoice.getClient().getName(),
+                invoice.getAmountCents(),
+                invoice.getPlatformFeeCents(),
+                invoice.getTaxCents(),
+                invoice.getTotalCents(),
+                invoice.getStatus().name(),
+                invoice.getDueDate().toString(),
+                invoice.getCreatedAt().toString()
+        );
+    }
 }

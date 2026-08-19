@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -18,6 +19,7 @@ import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
@@ -27,27 +29,16 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
-        // Skip API key authentication entirely for browser preflight OPTIONS requests
+        // Skip API key authentication for browser preflight OPTIONS requests
         return "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
-
-
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        // Temporary bypass for local ledger testing
-        filterChain.doFilter(request, response);
-        return;
-
-        /*// Fallback guard for OPTIONS requests
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-            response.setStatus(HttpServletResponse.SC_OK);
-            filterChain.doFilter(request, response);
-            return;
-        }
 
         String apiKey = request.getHeader("X-API-KEY");
+        log.info("Incoming Raw Header: '{}'", apiKey);
 
         if (apiKey == null || apiKey.isBlank()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -57,7 +48,9 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String hashedKey = hashApiKey(apiKey);
+        log.info("Computed Hash for Query: '{}'", hashedKey);
         Optional<ApiKey> keyEntity = apiKeyRepository.findByKeyHashAndActiveTrue(hashedKey);
+        log.info("DB Lookup Result isPresent: {}", keyEntity.isPresent());
 
         if (keyEntity.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -70,7 +63,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         var bucket = rateLimiterService.resolveBucket(tenantId);
 
         if (!bucket.tryConsume(1)) {
-            response.setStatus(429); // 429 Too Many Requests
+            response.setStatus(429);
             response.setContentType("application/json");
             response.setHeader("X-Rate-Limit-Retry-After-Seconds", "60");
             response.getWriter().write("{\"error\": \"Rate limit exceeded. Maximum 100 requests per minute allowed.\"}");
@@ -78,22 +71,20 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
-            TenantContext.setCurrentTenant(keyEntity.get().getTenant().getId());
+            TenantContext.setCurrentTenant(tenantId);
             filterChain.doFilter(request, response);
         } finally {
-            TenantContext.clear(); // Always wipe ThreadLocal state after request ends
-        }
-        */
-
-    }
-
-        private String hashApiKey (String key){
-            try {
-                MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                byte[] hash = digest.digest(key.getBytes(StandardCharsets.UTF_8));
-                return HexFormat.of().formatHex(hash);
-            } catch (NoSuchAlgorithmException e) {
-                throw new RuntimeException("SHA-256 algorithm not available", e);
-            }
+            TenantContext.clear();
         }
     }
+
+    public static String hashApiKey(String key) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(key.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
+    }
+}

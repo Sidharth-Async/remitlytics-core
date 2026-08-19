@@ -15,7 +15,6 @@ import java.util.UUID;
 @Getter
 @Setter
 @Table(name = "invoices")
-@EntityListeners(InvoiceEntityListener.class)
 public class Invoice {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
