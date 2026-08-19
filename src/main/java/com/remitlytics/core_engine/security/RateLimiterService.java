@@ -3,25 +3,40 @@ package com.remitlytics.core_engine.security;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class RateLimiterService {
 
-    private final Map<UUID, Bucket> cache = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> bucketCache = new ConcurrentHashMap<>();
 
-    public Bucket resolveBucket(UUID tenantId) {
-        return cache.computeIfAbsent(tenantId, this::newBucket);
+    @Value("${remitlytics.ratelimit.capacity:10}")
+    private long capacity;
+
+    @Value("${remitlytics.ratelimit.refill-tokens:10}")
+    private long refillTokens;
+
+    @Value("${remitlytics.ratelimit.refill-duration-seconds:60}")
+    private long refillDurationSeconds;
+
+    public Bucket resolveBucket(String apiKeyHash) {
+        return bucketCache.computeIfAbsent(apiKeyHash, this::createNewBucket);
     }
 
-    private Bucket newBucket(UUID tenantId) {
-        // Allow 100 requests per minute per tenant
-        Bandwidth limit = Bandwidth.classic(100, Refill.greedy(100, Duration.ofMinutes(1)));
+    public void clearCache() {
+        bucketCache.clear();
+    }
+
+    private Bucket createNewBucket(String key) {
+        Bandwidth limit = Bandwidth.classic(
+                capacity,
+                Refill.greedy(refillTokens, Duration.ofSeconds(refillDurationSeconds))
+        );
         return Bucket.builder()
                 .addLimit(limit)
                 .build();

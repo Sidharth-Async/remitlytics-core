@@ -60,7 +60,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         }
 
         UUID tenantId = keyEntity.get().getTenant().getId();
-        var bucket = rateLimiterService.resolveBucket(tenantId);
+        var bucket = rateLimiterService.resolveBucket(String.valueOf(tenantId));
 
         if (!bucket.tryConsume(1)) {
             response.setStatus(429);

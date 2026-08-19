@@ -8,10 +8,7 @@ import com.remitlytics.core_engine.service.InvoiceService;
 import com.remitlytics.core_engine.service.PdfExportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -78,7 +75,9 @@ public class InvoiceController {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);
-        headers.setContentDispositionFormData("attachment", "invoice_" + id + ".pdf");
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("invoice-" + id + ".pdf")
+                .build());
 
         return ResponseEntity.ok()
                 .headers(headers)
