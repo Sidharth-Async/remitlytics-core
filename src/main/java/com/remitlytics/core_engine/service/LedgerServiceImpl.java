@@ -4,16 +4,17 @@ import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.model.entities.LedgerAccount;
 import com.remitlytics.core_engine.model.entities.LedgerEntry;
 import com.remitlytics.core_engine.model.entities.LedgerTransaction;
+import com.remitlytics.core_engine.model.entities.Tenant;
+import com.remitlytics.core_engine.model.enums.AccountType;
+import com.remitlytics.core_engine.model.enums.EntryDirection;
 import com.remitlytics.core_engine.repository.LedgerAccountRepository;
 import com.remitlytics.core_engine.repository.LedgerEntryRepository;
 import com.remitlytics.core_engine.repository.LedgerTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -26,61 +27,63 @@ public class LedgerServiceImpl implements LedgerService {
 
     @Override
     @Transactional
-    public LedgerTransaction recordInvoicePayment(Invoice invoice) {
+    public void recordInvoicePayment(Invoice invoice) {
         String idempotencyKey = "PAYMENT_SETTLEMENT_" + invoice.getId();
 
-        Optional<LedgerTransaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
-        if (existingTx.isPresent()) {
-            log.warn("Payment ledger transaction already recorded for invoice {}. Returning existing record.", invoice.getId());
-            return existingTx.get();
+        // 1. Idempotency Check
+        if (transactionRepository.existsByIdempotencyKey(idempotencyKey)) {
+            log.warn("Ledger transaction already processed for idempotencyKey: {}", idempotencyKey);
+            return;
         }
 
-        UUID tenantId = invoice.getTenant().getId();
+        Tenant tenant = invoice.getTenant();
+        LedgerAccount bankAccount = getOrCreateAccount(tenant, "BANK", AccountType.ASSET);
+        LedgerAccount arAccount = getOrCreateAccount(tenant, "ACCOUNTS_RECEIVABLE", AccountType.ASSET);
 
-        LedgerAccount bankAccount = accountRepository.findByTenantIdAndAccountType(tenantId, "BANK")
-                .orElseGet(() -> createDefaultAccount(tenantId, "BANK", "Operating Bank Account"));
-
-        LedgerAccount arAccount = accountRepository.findByTenantIdAndAccountType(tenantId, "ACCOUNTS_RECEIVABLE")
-                .orElseGet(() -> createDefaultAccount(tenantId, "ACCOUNTS_RECEIVABLE", "Accounts Receivable"));
-
-        LedgerTransaction tx = LedgerTransaction.builder()
-                .tenantId(tenantId)
+        // 2. Create and Save Parent Transaction
+        LedgerTransaction transaction = LedgerTransaction.builder()
+                .tenant(tenant)
                 .invoiceId(invoice.getId())
-                .idempotencyKey(idempotencyKey) // <-- Added idempotency key mapping
-                .description("Payment settlement for Invoice ID: " + invoice.getId())
+                .idempotencyKey(idempotencyKey)
+                .description("Payment settlement for invoice: " + invoice.getId())
                 .build();
 
-        LedgerTransaction savedTx = transactionRepository.saveAndFlush(tx);
+        try {
+            transaction = transactionRepository.save(transaction);
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Concurrent duplicate transaction prevented by DB constraint: {}", idempotencyKey);
+            return;
+        }
 
-        Long amount = invoice.getTotalCents() != null ? invoice.getTotalCents() :
-                (invoice.getAmountCents() != null ? invoice.getAmountCents() : 0L);
-
-        LedgerEntry debitBank = LedgerEntry.builder()
-                .transaction(savedTx)
-                .accountId(bankAccount.getId())
-                .amountCents(amount)
-                .entryType("DEBIT")
+        // 3. Balanced Double-Entry Postings (Debit Cash/Bank, Credit AR)
+        LedgerEntry debitEntry = LedgerEntry.builder()
+                .transaction(transaction)
+                .account(bankAccount)
+                .direction(EntryDirection.DEBIT)
+                .amountCents(invoice.getTotalCents())
                 .build();
 
-        LedgerEntry creditAR = LedgerEntry.builder()
-                .transaction(savedTx)
-                .accountId(arAccount.getId())
-                .amountCents(amount)
-                .entryType("CREDIT")
+        LedgerEntry creditEntry = LedgerEntry.builder()
+                .transaction(transaction)
+                .account(arAccount)
+                .direction(EntryDirection.CREDIT)
+                .amountCents(invoice.getTotalCents())
                 .build();
 
-        entryRepository.saveAndFlush(debitBank);
-        entryRepository.saveAndFlush(creditAR);
+        entryRepository.save(debitEntry);
+        entryRepository.save(creditEntry);
 
-        return savedTx;
+        log.info("Successfully recorded balanced double-entry ledger transaction: {}", transaction.getId());
     }
 
-    private LedgerAccount createDefaultAccount(UUID tenantId, String accountType, String name) {
-        LedgerAccount account = LedgerAccount.builder()
-                .tenantId(tenantId)
-                .accountType(accountType)
-                .name(name)
-                .build();
-        return accountRepository.save(account);
+    private LedgerAccount getOrCreateAccount(Tenant tenant, String name, AccountType type) {
+        return accountRepository.findByTenantIdAndName(tenant.getId(), name)
+                .orElseGet(() -> accountRepository.save(
+                        LedgerAccount.builder()
+                                .tenant(tenant)
+                                .name(name)
+                                .type(type)
+                                .build()
+                ));
     }
 }

@@ -3,6 +3,7 @@ package com.remitlytics.core_engine.service;
 import com.remitlytics.core_engine.dto.InvoiceBreakdown;
 import com.remitlytics.core_engine.dto.InvoiceResponse;
 import com.remitlytics.core_engine.dto.WebhookEvent;
+import com.remitlytics.core_engine.event.InvoiceSentEvent;
 import com.remitlytics.core_engine.model.entities.Client;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.model.entities.InvoiceAuditLog;
@@ -14,6 +15,7 @@ import com.remitlytics.core_engine.repository.InvoiceRepository;
 import com.remitlytics.core_engine.repository.TenantRepository;
 import com.remitlytics.core_engine.security.TenantContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +33,8 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final InvoiceAuditLogRepository invoiceAuditLogRepository;
     private final InvoiceCalculationService invoiceCalculationService;
     private final TenantRepository tenantRepository;
-    private final LedgerService ledgerService; // Injected Ledger Service
+    private final LedgerService ledgerService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -132,6 +135,15 @@ public class InvoiceServiceImpl implements InvoiceService {
         // Trigger Ledger double-entry postings when moving to PAID
         if (newStatus == InvoiceStatus.PAID) {
             ledgerService.recordInvoicePayment(updatedInvoice);
+        }
+
+        if (newStatus == InvoiceStatus.SENT) {
+            InvoiceResponse response = mapToResponse(invoice);
+            eventPublisher.publishEvent(new InvoiceSentEvent(
+                    response,
+                    invoice.getClient().getEmail(),
+                    invoice.getClient().getName()
+            ));
         }
 
         return mapToResponse(updatedInvoice);

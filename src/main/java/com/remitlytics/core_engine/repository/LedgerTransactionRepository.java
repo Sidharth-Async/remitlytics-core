@@ -9,5 +9,6 @@ import java.util.UUID;
 
 @Repository
 public interface LedgerTransactionRepository extends JpaRepository<LedgerTransaction, UUID> {
+    boolean existsByIdempotencyKey(String idempotencyKey);
     Optional<LedgerTransaction> findByIdempotencyKey(String idempotencyKey);
 }

@@ -1,17 +1,19 @@
 package com.remitlytics.core_engine.model.entities;
 
+import com.remitlytics.core_engine.model.enums.EntryDirection;
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.OffsetDateTime;
+
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "ledger_entries")
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class LedgerEntry {
 
     @Id
@@ -22,15 +24,18 @@ public class LedgerEntry {
     @JoinColumn(name = "transaction_id", nullable = false)
     private LedgerTransaction transaction;
 
-    @Column(name = "account_id", nullable = false)
-    private UUID accountId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "account_id", nullable = false)
+    private LedgerAccount account;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private EntryDirection direction;
 
     @Column(name = "amount_cents", nullable = false)
     private Long amountCents;
 
-    @Column(name = "entry_type", nullable = false, length = 10)
-    private String entryType;
-
-    @Column(name = "created_at", insertable = false, updatable = false)
-    private OffsetDateTime createdAt;
+    @Builder.Default
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

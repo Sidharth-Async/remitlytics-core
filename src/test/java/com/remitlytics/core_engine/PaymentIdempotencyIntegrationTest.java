@@ -2,6 +2,7 @@ package com.remitlytics.core_engine;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.remitlytics.core_engine.model.entities.*;
+import com.remitlytics.core_engine.model.enums.EntryDirection;
 import com.remitlytics.core_engine.model.enums.InvoiceStatus;
 import com.remitlytics.core_engine.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -166,11 +167,11 @@ class PaymentIdempotencyIntegrationTest {
         assertThat(entries).hasSize(2);
 
         long totalDebits = entries.stream()
-                .filter(e -> "DEBIT".equalsIgnoreCase(e.getEntryType()))
+                .filter(e -> e.getDirection() == EntryDirection.DEBIT)
                 .mapToLong(LedgerEntry::getAmountCents)
                 .sum();
         long totalCredits = entries.stream()
-                .filter(e -> "CREDIT".equalsIgnoreCase(e.getEntryType()))
+                .filter(e -> e.getDirection() == EntryDirection.CREDIT)
                 .mapToLong(LedgerEntry::getAmountCents)
                 .sum();
 
