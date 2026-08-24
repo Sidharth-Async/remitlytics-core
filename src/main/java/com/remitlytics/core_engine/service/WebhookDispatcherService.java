@@ -8,5 +8,5 @@ import java.util.UUID;
 
 @Service
 public interface WebhookDispatcherService {
-    WebhookDeliveryResult dispatchWithRetry(UUID tenantId, String targetUrl, WebhookPayload payload);
+    WebhookDeliveryResult dispatchWithRetry(UUID tenantId,String eventType, String targetUrl, WebhookPayload payload);
 }

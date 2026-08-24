@@ -1,5 +1,6 @@
 package com.remitlytics.core_engine.model.entities;
 
+
 import com.remitlytics.core_engine.model.enums.DeliveryStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -21,15 +22,22 @@ public class WebhookDeliveryLog {
     private UUID tenantId;
 
     @Column(nullable = false)
+    private String eventType;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String payload;
+
+    @Column(nullable = false)
     private String targetUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private DeliveryStatus status; // PENDING, DELIVERED, DEAD_LETTER
+    private DeliveryStatus status;
 
     private int attempts;
     private String lastErrorMessage;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+
 }

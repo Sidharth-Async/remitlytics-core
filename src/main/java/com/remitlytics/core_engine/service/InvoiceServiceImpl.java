@@ -3,6 +3,7 @@ package com.remitlytics.core_engine.service;
 import com.remitlytics.core_engine.dto.InvoiceBreakdown;
 import com.remitlytics.core_engine.dto.InvoiceResponse;
 import com.remitlytics.core_engine.dto.WebhookEvent;
+import com.remitlytics.core_engine.dto.WebhookPayload;
 import com.remitlytics.core_engine.event.InvoiceSentEvent;
 import com.remitlytics.core_engine.model.entities.Client;
 import com.remitlytics.core_engine.model.entities.Invoice;
@@ -35,6 +36,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final TenantRepository tenantRepository;
     private final LedgerService ledgerService;
     private final ApplicationEventPublisher eventPublisher;
+    private final WebhookDispatcherService webhookDispatcherService;
 
     @Override
     @Transactional(readOnly = true)
@@ -135,6 +137,17 @@ public class InvoiceServiceImpl implements InvoiceService {
         // Trigger Ledger double-entry postings when moving to PAID
         if (newStatus == InvoiceStatus.PAID) {
             ledgerService.recordInvoicePayment(updatedInvoice);
+
+            WebhookPayload payload = new WebhookPayload(
+                    updatedInvoice.getStatus().name(),
+                    updatedInvoice.getId(),
+                    updatedInvoice.getAmountCents()
+            );
+            webhookDispatcherService.dispatchWithRetry(
+                    updatedInvoice.getTenant().getId(),
+                    "http://localhost:9999/blackhole",
+                    payload
+            );
         }
 
         if (newStatus == InvoiceStatus.SENT) {

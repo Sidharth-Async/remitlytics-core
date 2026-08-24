@@ -8,8 +8,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
 
 @SpringBootApplication
-@EnableScheduling
 @EnableAsync
+@EnableScheduling
 public class CoreEngineApplication {
 
 	public static void main(String[] args) {

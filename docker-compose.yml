@@ -2,6 +2,7 @@ services:
   remitlytics-db:
     image: postgres:16-alpine
     container_name: remitlytics_postgres
+    restart: always
     ports:
       - "5432:5432"
     environment:
@@ -10,7 +11,42 @@ services:
       POSTGRES_DB: remitlytics_ledger
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U remit_admin -d remitlytics_ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: remitlytics_mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP server
+      - "8025:8025" # Web UI for inspecting outgoing PDF invoice emails
+
+  core-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: remitlytics_core_engine
+    restart: unless-stopped
+    depends_on:
+      remitlytics-db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://remitlytics-db:5432/remitlytics_ledger
+      SPRING_DATASOURCE_USERNAME: remit_admin
+      SPRING_DATASOURCE_PASSWORD: admin_secure_password123
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+      REMITLYTICS_STRIPE_WEBHOOK_SECRET: whsec_prod_simulation_key
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres_data:

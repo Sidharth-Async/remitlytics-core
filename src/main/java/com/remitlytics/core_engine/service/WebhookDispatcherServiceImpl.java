@@ -41,15 +41,20 @@ public class WebhookDispatcherServiceImpl implements WebhookDispatcherService {
     private String webhookSigningSecret;
 
     @Override
-    public WebhookDeliveryResult dispatchWithRetry(UUID tenantId, String targetUrl, WebhookPayload payload) {
+    public WebhookDeliveryResult dispatchWithRetry(UUID tenantId,String eventType, String targetUrl, WebhookPayload payload) {
+
+        String payloadJson = "";
+        
         WebhookDeliveryLog deliveryLog = new WebhookDeliveryLog();
         deliveryLog.setTenantId(tenantId);
         deliveryLog.setTargetUrl(targetUrl);
         deliveryLog.setStatus(DeliveryStatus.PENDING);
-
-        String payloadJson;
+        deliveryLog.setEventType(eventType);
+        deliveryLog.setPayload(payloadJson);
+        
         try {
             payloadJson = objectMapper.writeValueAsString(payload);
+            deliveryLog.setPayload(payloadJson);
         } catch (JsonProcessingException e) {
             deliveryLog.setStatus(DeliveryStatus.DEAD_LETTER);
             deliveryLog.setLastErrorMessage("JSON Serialization error: " + e.getMessage());
