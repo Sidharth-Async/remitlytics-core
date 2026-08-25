@@ -25,4 +25,7 @@ public class Client {
     @JoinColumn(name = "organization_id", nullable = false)
     private Organization organization;
 
+    @Column(name = "webhook_url")
+    String webhookUrl;
+
 }

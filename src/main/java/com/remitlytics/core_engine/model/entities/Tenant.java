@@ -22,4 +22,7 @@ public class Tenant {
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "webhook_url")
+    String webhookUrl;
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.remitlytics.core_engine.dto.WebhookDeliveryResult;
 import com.remitlytics.core_engine.dto.WebhookPayload;
+import com.remitlytics.core_engine.event.WebhookDispatchEvent;
 import com.remitlytics.core_engine.model.entities.WebhookDeliveryLog;
 import com.remitlytics.core_engine.model.enums.DeliveryStatus;
 import com.remitlytics.core_engine.repository.WebhookDeliveryLogRepository;
@@ -15,7 +16,10 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
@@ -106,5 +110,17 @@ public class WebhookDispatcherServiceImpl implements WebhookDispatcherService {
         deliveryLogRepository.save(deliveryLog);
 
         return new WebhookDeliveryResult(false, attempts, lastError);
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleWebhookEvent(WebhookDispatchEvent event) {
+        // This now runs in a completely separate background thread!
+        dispatchWithRetry(
+                event.tenantId(),
+                event.eventType(),
+                event.targetUrl(),
+                event.payload()
+        );
     }
 }

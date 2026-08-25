@@ -10,4 +10,6 @@ import java.util.UUID;
 @Repository
 public interface WebhookDeliveryLogRepository extends JpaRepository<WebhookDeliveryLog, UUID> {
     List<WebhookDeliveryLog> findByTenantId(UUID tenantId);
+
+
 }

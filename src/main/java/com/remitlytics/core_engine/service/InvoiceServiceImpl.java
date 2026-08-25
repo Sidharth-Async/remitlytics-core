@@ -5,6 +5,7 @@ import com.remitlytics.core_engine.dto.InvoiceResponse;
 import com.remitlytics.core_engine.dto.WebhookEvent;
 import com.remitlytics.core_engine.dto.WebhookPayload;
 import com.remitlytics.core_engine.event.InvoiceSentEvent;
+import com.remitlytics.core_engine.event.WebhookDispatchEvent;
 import com.remitlytics.core_engine.model.entities.Client;
 import com.remitlytics.core_engine.model.entities.Invoice;
 import com.remitlytics.core_engine.model.entities.InvoiceAuditLog;
@@ -134,20 +135,29 @@ public class InvoiceServiceImpl implements InvoiceService {
         auditLog.setReason(reason != null ? reason : "Manual status transition to " + newStatus);
         invoiceAuditLogRepository.save(auditLog);
 
+
         // Trigger Ledger double-entry postings when moving to PAID
         if (newStatus == InvoiceStatus.PAID) {
-            ledgerService.recordInvoicePayment(updatedInvoice);
 
-            WebhookPayload payload = new WebhookPayload(
-                    updatedInvoice.getStatus().name(),
-                    updatedInvoice.getId(),
-                    updatedInvoice.getAmountCents()
-            );
-            webhookDispatcherService.dispatchWithRetry(
-                    updatedInvoice.getTenant().getId(),
-                    "http://localhost:9999/blackhole",
-                    payload
-            );
+            ledgerService.recordInvoicePayment(updatedInvoice);
+            String targetUrl = updatedInvoice.getClient().getWebhookUrl();
+
+            // CORRECTED LOGIC: If it is NOT null and NOT blank
+            if (targetUrl != null && !targetUrl.isBlank()) {
+                WebhookPayload payload = new WebhookPayload(
+                        updatedInvoice.getStatus().name(),
+                        updatedInvoice.getId(),
+                        updatedInvoice.getAmountCents()
+                );
+
+                WebhookDispatchEvent event = new WebhookDispatchEvent(
+                        updatedInvoice.getTenant().getId(),
+                        "invoice.paid",
+                        targetUrl,
+                        payload
+                );
+                eventPublisher.publishEvent(event);
+            }
         }
 
         if (newStatus == InvoiceStatus.SENT) {

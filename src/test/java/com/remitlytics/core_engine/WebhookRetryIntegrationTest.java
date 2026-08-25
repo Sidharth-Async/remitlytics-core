@@ -82,7 +82,7 @@ class WebhookRetryIntegrationTest {
                 .thenReturn(new ResponseEntity<>("Service Unavailable", HttpStatus.SERVICE_UNAVAILABLE))
                 .thenReturn(new ResponseEntity<>("OK", HttpStatus.OK));
 
-        WebhookDeliveryResult result = webhookDispatcherService.dispatchWithRetry(testTenant.getId(), targetUrl, payload);
+        WebhookDeliveryResult result = webhookDispatcherService.dispatchWithRetry(testTenant.getId(), "test.event",targetUrl, payload);
 
         assertThat(result.isDelivered()).isTrue();
         assertThat(result.getAttemptCount()).isEqualTo(3);
@@ -106,7 +106,7 @@ class WebhookRetryIntegrationTest {
         when(restTemplate.postForEntity(eq(targetUrl), any(), eq(String.class)))
                 .thenThrow(new ResourceAccessException("Connection timed out"));
 
-        WebhookDeliveryResult result = webhookDispatcherService.dispatchWithRetry(testTenant.getId(), targetUrl, payload);
+        WebhookDeliveryResult result = webhookDispatcherService.dispatchWithRetry(testTenant.getId(),"test.event",targetUrl, payload);
 
         assertThat(result.isDelivered()).isFalse();
         assertThat(result.getAttemptCount()).isEqualTo(3);
