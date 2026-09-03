@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface WebhookDispatcherService {
     WebhookDeliveryResult dispatchWithRetry(UUID tenantId,String eventType, String targetUrl, WebhookPayload payload);
     void handleWebhookEvent(WebhookDispatchEvent event);
+
 }
