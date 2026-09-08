@@ -123,4 +123,51 @@ public class WebhookDispatcherServiceImpl implements WebhookDispatcherService {
                 event.payload()
         );
     }
+
+    @Override
+    public WebhookDeliveryResult retryExistingLog(WebhookDeliveryLog deliveryLog) {
+        String payloadJson = deliveryLog.getPayload();
+        long timestamp = Instant.now().getEpochSecond();
+        String signature = webhookSigner.generateSignature(payloadJson, timestamp, webhookSigningSecret);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Signature-Timestamp", String.valueOf(timestamp));
+        headers.set("X-Signature", signature);
+
+        HttpEntity<String> httpEntity = new HttpEntity<>(payloadJson, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(deliveryLog.getTargetUrl(), httpEntity, String.class);
+            deliveryLog.setAttempts(deliveryLog.getAttempts() + 1);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                deliveryLog.setStatus(DeliveryStatus.DELIVERED);
+                deliveryLog.setLastErrorMessage(null);
+                deliveryLogRepository.save(deliveryLog);
+                return new WebhookDeliveryResult(true, deliveryLog.getAttempts(), null);
+            } else {
+                String error = "HTTP " + response.getStatusCode().value();
+                deliveryLog.setLastErrorMessage(error);
+                deliveryLogRepository.save(deliveryLog);
+                return new WebhookDeliveryResult(false, deliveryLog.getAttempts(), error);
+            }
+        } catch (Exception ex) {
+            deliveryLog.setAttempts(deliveryLog.getAttempts() + 1);
+            deliveryLog.setLastErrorMessage(ex.getMessage());
+            deliveryLogRepository.save(deliveryLog);
+            return new WebhookDeliveryResult(false, deliveryLog.getAttempts(), ex.getMessage());
+        }
+    }
+
+    @Override
+    public WebhookDeliveryResult replayWebhook(UUID webhookLogId) {
+        WebhookDeliveryLog deliveryLog = deliveryLogRepository.findById(webhookLogId)
+                .orElseThrow(() -> new IllegalArgumentException("Webhook log not found with ID: " + webhookLogId));
+
+        log.info("Manual webhook redelivery requested for ID: {}", webhookLogId);
+
+        // Call our tested in-place retry logic
+        return retryExistingLog(deliveryLog);
+    }
 }

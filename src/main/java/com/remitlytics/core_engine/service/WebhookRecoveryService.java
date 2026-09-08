@@ -43,22 +43,7 @@ public class WebhookRecoveryService {
 
         for (WebhookDeliveryLog logEntry : failedLogs) {
             try {
-                WebhookPayload payload = objectMapper.readValue(logEntry.getPayload(), WebhookPayload.class);
-
-                WebhookDeliveryResult result = webhookDispatcherService.dispatchWithRetry(
-                        logEntry.getTenantId(),
-                        logEntry.getEventType(),
-                        logEntry.getTargetUrl(),
-                        payload
-                );
-
-                if (result.isDelivered()) {
-                    logEntry.setStatus(DeliveryStatus.DELIVERED);
-                }
-
-                logEntry.setAttempts(logEntry.getAttempts() + 1);
-                deliveryLogRepository.save(logEntry);
-
+                  webhookDispatcherService.retryExistingLog(logEntry);
             } catch (Exception ex) {
                 log.error("Failed to recover dead letter webhook ID: {}", logEntry.getId(), ex);
             }
