@@ -9,10 +9,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface WebhookDeliveryLogRepository extends JpaRepository<WebhookDeliveryLog, UUID> {
     List<WebhookDeliveryLog> findByTenantId(UUID tenantId);
     List<WebhookDeliveryLog> findByStatusAndAttemptsLessThanOrderByCreatedAtAsc(DeliveryStatus status, int maxAttempts, Pageable pageable);
+    Optional<WebhookDeliveryLog> findByIdAndTenantId(UUID id, UUID tenantId);
 }

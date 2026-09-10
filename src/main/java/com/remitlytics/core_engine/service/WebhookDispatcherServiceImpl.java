@@ -161,13 +161,13 @@ public class WebhookDispatcherServiceImpl implements WebhookDispatcherService {
     }
 
     @Override
-    public WebhookDeliveryResult replayWebhook(UUID webhookLogId) {
-        WebhookDeliveryLog deliveryLog = deliveryLogRepository.findById(webhookLogId)
+    public WebhookDeliveryResult replayWebhook(UUID tenantId, UUID webhookLogId) {
+        WebhookDeliveryLog deliveryLog = deliveryLogRepository.findByIdAndTenantId(webhookLogId, tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("Webhook log not found with ID: " + webhookLogId));
 
         log.info("Manual webhook redelivery requested for ID: {}", webhookLogId);
 
-        // Call our tested in-place retry logic
+
         return retryExistingLog(deliveryLog);
     }
 }

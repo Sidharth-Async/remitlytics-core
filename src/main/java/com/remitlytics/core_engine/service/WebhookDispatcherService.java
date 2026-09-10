@@ -13,6 +13,6 @@ public interface WebhookDispatcherService {
     WebhookDeliveryResult dispatchWithRetry(UUID tenantId,String eventType, String targetUrl, WebhookPayload payload);
     WebhookDeliveryResult retryExistingLog(WebhookDeliveryLog deliveryLog);
     void handleWebhookEvent(WebhookDispatchEvent event);
-    WebhookDeliveryResult replayWebhook(UUID webhookLogId);
+    WebhookDeliveryResult replayWebhook(UUID tenantId, UUID webhookLogId);
 
 }

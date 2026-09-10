@@ -16,8 +16,11 @@ public class WebhookAdminController {
     private final WebhookDispatcherService webhookDispatcherService;
 
     @PostMapping("/{id}/replay")
-    public ResponseEntity<WebhookDeliveryResult> replayWebhook(@PathVariable UUID id) {
-        WebhookDeliveryResult result = webhookDispatcherService.replayWebhook(id);
+    public ResponseEntity<WebhookDeliveryResult> replayWebhook(
+            @RequestHeader("X-Tenant-ID") UUID tenantId,
+            @PathVariable("id") UUID id) {
+
+        WebhookDeliveryResult result = webhookDispatcherService.replayWebhook(tenantId, id);
         return ResponseEntity.ok(result);
     }
 }
