@@ -17,4 +17,5 @@ public interface WebhookDeliveryLogRepository extends JpaRepository<WebhookDeliv
     List<WebhookDeliveryLog> findByTenantId(UUID tenantId);
     List<WebhookDeliveryLog> findByStatusAndAttemptsLessThanOrderByCreatedAtAsc(DeliveryStatus status, int maxAttempts, Pageable pageable);
     Optional<WebhookDeliveryLog> findByIdAndTenantId(UUID id, UUID tenantId);
+    List<WebhookDeliveryLog> findTop50ByTenantIdOrderByCreatedAtDesc(UUID tenantId);
 }
