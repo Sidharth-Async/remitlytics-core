@@ -161,6 +161,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         if (newStatus == InvoiceStatus.SENT) {
+            ledgerService.recordInvoiceIssuance(invoice);
             InvoiceResponse response = mapToResponse(invoice);
             eventPublisher.publishEvent(new InvoiceSentEvent(
                     response,

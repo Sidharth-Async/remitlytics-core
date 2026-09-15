@@ -25,24 +25,19 @@ public class InvoiceOverdueScheduler {
 
     private static final int BATCH_SIZE = 100;
 
-    /**
-     * Runs daily at midnight (or configurable interval) to transition past-due SENT invoices to OVERDUE.
-     */
     @Scheduled(cron = "${remitlytics.scheduler.overdue-cron:0 0 0 * * *}")
-    @Transactional
     public int sweepOverdueInvoices() {
         LocalDate today = LocalDate.now();
         log.info("Starting automated overdue invoice sweep for due dates prior to {}", today);
 
         int totalProcessed = 0;
-        int pageNumber = 0;
-        boolean hasMore = true;
 
-        while (hasMore) {
+        while (true) {
+            // FIX: Always query page 0 because updated rows drop out of the 'SENT' filter
             Slice<Invoice> slice = invoiceRepository.findByStatusAndDueDateBefore(
                     InvoiceStatus.SENT,
                     today,
-                    PageRequest.of(pageNumber, BATCH_SIZE)
+                    PageRequest.of(0, BATCH_SIZE)
             );
 
             if (slice.isEmpty()) {
@@ -50,25 +45,30 @@ public class InvoiceOverdueScheduler {
             }
 
             for (Invoice invoice : slice.getContent()) {
-                invoice.setStatus(InvoiceStatus.OVERDUE);
-                invoiceRepository.save(invoice);
-
-                // Record audit log for automated transition
-                InvoiceAuditLog auditLog = new InvoiceAuditLog();
-                auditLog.setInvoice(invoice);
-                auditLog.setPreviousStatus(InvoiceStatus.SENT);
-                auditLog.setNewStatus(InvoiceStatus.OVERDUE);
-                auditLog.setReason("Automated scheduler sweep: invoice past due date (" + invoice.getDueDate() + ")");
-                invoiceAuditLogRepository.save(auditLog);
-
+                processSingleInvoice(invoice);
                 totalProcessed++;
             }
 
-            hasMore = slice.hasNext();
-            pageNumber++;
+            // Stop if there wasn't a full batch
+            if (!slice.hasContent() || slice.getNumberOfElements() < BATCH_SIZE) {
+                break;
+            }
         }
 
         log.info("Completed overdue invoice sweep. Total transitioned to OVERDUE: {}", totalProcessed);
         return totalProcessed;
+    }
+
+    @Transactional
+    public void processSingleInvoice(Invoice invoice) {
+        invoice.setStatus(InvoiceStatus.OVERDUE);
+        invoiceRepository.save(invoice);
+
+        InvoiceAuditLog auditLog = new InvoiceAuditLog();
+        auditLog.setInvoice(invoice);
+        auditLog.setPreviousStatus(InvoiceStatus.SENT);
+        auditLog.setNewStatus(InvoiceStatus.OVERDUE);
+        auditLog.setReason("Automated scheduler sweep: invoice past due date (" + invoice.getDueDate() + ")");
+        invoiceAuditLogRepository.save(auditLog);
     }
 }

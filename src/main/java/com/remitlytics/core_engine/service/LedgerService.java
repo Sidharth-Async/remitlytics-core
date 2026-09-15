@@ -4,4 +4,5 @@ import com.remitlytics.core_engine.model.entities.Invoice;
 
 public interface LedgerService {
     void recordInvoicePayment(Invoice invoice);
+    void recordInvoiceIssuance(Invoice invoice);
 }

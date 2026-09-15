@@ -76,6 +76,57 @@ public class LedgerServiceImpl implements LedgerService {
         log.info("Successfully recorded balanced double-entry ledger transaction: {}", transaction.getId());
     }
 
+    @Override
+    @Transactional
+    public void recordInvoiceIssuance(Invoice invoice) {
+        String idempotencyKey = "INVOICE_ISSUANCE_" + invoice.getId();
+
+        // 1. Idempotency Check
+        if (transactionRepository.existsByIdempotencyKey(idempotencyKey)) {
+            log.warn("Ledger transaction already processed for idempotencyKey: {}", idempotencyKey);
+            return;
+        }
+
+        Tenant tenant = invoice.getTenant();
+        LedgerAccount arAccount = getOrCreateAccount(tenant, "ACCOUNTS_RECEIVABLE", AccountType.ASSET);
+        LedgerAccount revenueAccount = getOrCreateAccount(tenant, "REVENUE", AccountType.REVENUE);
+
+        // 2. Create and Save Parent Transaction
+        LedgerTransaction transaction = LedgerTransaction.builder()
+                .tenant(tenant)
+                .invoiceId(invoice.getId())
+                .idempotencyKey(idempotencyKey)
+                .description("Accrual revenue recognized for invoice: " + invoice.getId())
+                .build();
+
+        try {
+            transaction = transactionRepository.save(transaction);
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Concurrent duplicate issuance transaction prevented by DB constraint: {}", idempotencyKey);
+            return;
+        }
+
+        // 3. Balanced Double-Entry Postings (Debit AR, Credit REVENUE)
+        LedgerEntry debitEntry = LedgerEntry.builder()
+                .transaction(transaction)
+                .account(arAccount)
+                .direction(EntryDirection.DEBIT)
+                .amountCents(invoice.getTotalCents())
+                .build();
+
+        LedgerEntry creditEntry = LedgerEntry.builder()
+                .transaction(transaction)
+                .account(revenueAccount)
+                .direction(EntryDirection.CREDIT)
+                .amountCents(invoice.getTotalCents())
+                .build();
+
+        entryRepository.save(debitEntry);
+        entryRepository.save(creditEntry);
+
+        log.info("Successfully posted accrual issuance ledger transaction: {}", transaction.getId());
+    }
+
     private LedgerAccount getOrCreateAccount(Tenant tenant, String name, AccountType type) {
         return accountRepository.findByTenantIdAndName(tenant.getId(), name)
                 .orElseGet(() -> accountRepository.save(

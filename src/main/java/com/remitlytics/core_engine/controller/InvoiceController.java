@@ -12,6 +12,7 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -89,5 +90,14 @@ public class InvoiceController {
             @RequestHeader("X-API-KEY") String apiKey) {
         List<InvoiceResponse> invoices = invoiceService.getAllInvoicesForTenant(apiKey);
         return ResponseEntity.ok(invoices);
+    }
+
+    @PostMapping("/process-overdue")
+    public ResponseEntity<Map<String, Object>> processOverdueInvoices() {
+        int count = invoiceService.processOverdueInvoices();
+        return ResponseEntity.ok(Map.of(
+                "message", "Overdue invoice sweep completed successfully",
+                "processedCount", count
+        ));
     }
 }
