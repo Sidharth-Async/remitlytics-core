@@ -92,7 +92,7 @@ public class InvoiceController {
         return ResponseEntity.ok(invoices);
     }
 
-    @PostMapping("/process-overdue")
+    @PostMapping("/invoices/process-overdue")
     public ResponseEntity<Map<String, Object>> processOverdueInvoices() {
         int count = invoiceService.processOverdueInvoices();
         return ResponseEntity.ok(Map.of(

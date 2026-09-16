@@ -38,6 +38,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String rawApiKey = request.getHeader("X-API-KEY");
 
         // Skip requests without an API key
@@ -56,6 +61,14 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         } else {
             long waitForRefillNanos = probe.getNanosToWaitForRefill();
             long retryAfterSeconds = Math.max(1, TimeUnit.NANOSECONDS.toSeconds(waitForRefillNanos));
+
+            // Attach CORS headers so the browser does not reject the 429 as a network error
+            String origin = request.getHeader("Origin");
+            if (origin != null && (origin.equals("http://localhost:3000") || origin.startsWith("http://localhost:"))) {
+                response.setHeader("Access-Control-Allow-Origin", origin);
+                response.setHeader("Access-Control-Allow-Credentials", "true");
+                response.setHeader("Access-Control-Expose-Headers", "X-RateLimit-Remaining, X-RateLimit-Retry-After-Seconds");
+            }
 
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
