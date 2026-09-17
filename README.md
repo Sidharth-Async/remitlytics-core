@@ -67,7 +67,7 @@ No complex local setup or JVM configuration needed. You're about 60 seconds away
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/yourusername/remitlytics.git
+git clone https://github.com/Sidharth-Async/remitlytics-core.git
 cd remitlytics
 
 # 2. Spin up Postgres, the Spring Boot API, and the Next.js frontend
