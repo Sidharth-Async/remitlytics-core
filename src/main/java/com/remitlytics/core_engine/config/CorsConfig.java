@@ -19,7 +19,7 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of("http://localhost:3000","https://remitlytics.vercel.app");
+        config.setAllowedOrigins(List.of("http://localhost:3000","https://remitlytics.vercel.app"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
         config.setExposedHeaders(List.of("Content-Disposition"));
